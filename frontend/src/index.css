@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg: #E8DCC6;
+    --surface: #F1E8D6;
+    --surface-2: #DDD0B8;
+    --line: #B7A89A;
+    --accent: #722F37;
+    --accent-hover: #5E242C;
+    --on-accent: #F5EEDF;
+    --text: #3A1F23;
+    --text-muted: #6E5A54;
+    --status-confirmed: #3F6B4A;
+    --status-confirmed-bg: #DCE5D2;
+    --status-cancelled: #722F37;
+    --status-cancelled-bg: #EBD3D0;
+  }
+
+  html {
+    background-color: #E8DCC6;
+    margin: 0;
+    padding: 0;
+    border: none;
+    outline: none;
+  }
+
+  body {
+    background-color: #E8DCC6;
+    color: #3A1F23;
+    margin: 0;
+    padding: 0;
+    border: none;
+    outline: none;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, .font-serif {
+    font-family: 'Fraunces', Georgia, serif;
+    letter-spacing: -0.015em;
+  }
+
+  .font-mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+  }
+}
+
+/* Row highlight on booking/cancel: a burgundy tint fading out over ~2s */
+@keyframes row-highlight-burgundy {
+  0% {
+    background-color: rgba(114, 47, 55, 0.28);
+  }
+  30% {
+    background-color: rgba(114, 47, 55, 0.20);
+  }
+  70% {
+    background-color: rgba(114, 47, 55, 0.12);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-highlight-added,
+.animate-highlight-cancelled {
+  animation: row-highlight-burgundy 2.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Custom waveform bars */
+.waveform-bar {
+  transition: height 0.08s ease-in-out;
+}
+
+/* Slim themed scrollbar using --line */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #B7A89A;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9D8E80;
+}
