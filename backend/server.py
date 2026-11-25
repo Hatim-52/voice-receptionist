@@ -180,15 +180,15 @@ def get_appointments():
 
 
 @app.post("/api/reset")
-def reset_database():
+async def reset_database():
     """Reset database to fresh mock doctors and sample appointments."""
     db.init_db(reset=True)
     # Broadcast reset event so dashboard refreshes automatically
-    asyncio.create_task(broadcast_live_event({
+    await broadcast_live_event({
         "event": "database_reset",
         "data": {},
         "timestamp": ""
-    }))
+    })
     return {
         "status": "success",
         "message": "Database successfully reset with seed doctors and appointments."
