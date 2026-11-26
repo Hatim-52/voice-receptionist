@@ -225,6 +225,29 @@ def run_tests():
     print(f"  [PASS] Correctly handled cancellation with no active appointment: \"{cancel_none['message']}\"")
 
     print("\n==================================================================")
+    print("=== 9. Testing Demo Phone (9876543210) Book + Cancel Exact ID  ===")
+    print("==================================================================")
+    demo_book = tools.book_appointment(
+        phone_number="9876543210",
+        doctor_name="Dr. Priya Sharma",
+        date="tomorrow",
+        time="03:30 PM",
+        patient_name="Hatim Noor",
+        phone_confirmed=True
+    )
+    assert demo_book["status"] == "confirmed", f"Demo booking failed: {demo_book}"
+    new_apt_id = demo_book["appointment_id"]
+    demo_cancel = tools.cancel_appointment(
+        phone_number="9876543210",
+        phone_confirmed=True
+    )
+    assert demo_cancel["status"] == "cancelled", f"Demo cancel failed: {demo_cancel}"
+    assert demo_cancel["appointment_id"] == new_apt_id, (
+        f"Expected cancelled id {new_apt_id}, got {demo_cancel['appointment_id']}"
+    )
+    print(f"  [PASS] Booked and cancelled exact appointment_id={new_apt_id} for 9876543210 (no seed collision).")
+
+    print("\n==================================================================")
     print("=== ALL TESTS PASSED WITH 100% SUCCESS!                        ===")
     print("==================================================================")
 

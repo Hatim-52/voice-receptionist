@@ -12,11 +12,13 @@ Tools:
 
 import os
 import asyncio
+from pathlib import Path
 from typing import Dict, Any, List
 from dotenv import load_dotenv
 
 # Pipecat core imports
 from pipecat.audio.vad.silero import SileroVADAnalyzer
+from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineTask, PipelineParams
@@ -31,7 +33,10 @@ from pipecat.frames.frames import (
 )
 from pipecat.processors.frame_processor import FrameProcessor, FrameDirection
 from pipecat.processors.aggregators.llm_context import LLMContext
-from pipecat.processors.aggregators.llm_response_universal import LLMContextAggregatorPair
+from pipecat.processors.aggregators.llm_response_universal import (
+    LLMContextAggregatorPair,
+    LLMUserAggregatorParams,
+)
 from pipecat.adapters.llm.schemas.function_schema import FunctionSchema
 from pipecat.adapters.llm.schemas.tools_schema import ToolsSchema
 from pipecat.services.llm_service import FunctionCallParams
@@ -49,7 +54,7 @@ from pipecat.transports.base_transport import TransportParams
 # Local modules
 from backend import tools
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 # System Prompt embodying the voice receptionist persona and strict rules
 SYSTEM_PROMPT = """
@@ -252,14 +257,35 @@ class TranscriptBroadcaster(FrameProcessor):
 # Pipeline Runner Factory
 # ==============================================================================
 
+class RetryingGoogleLLMService(GoogleLLMService):
+    """GoogleLLMService wrapper with max 2 retries (1s, 2s backoff) on 503 errors."""
+
+    async def _stream_response(self, context: LLMContext):
+        for attempt in range(3):
+            yielded = False
+            try:
+                async for chunk in super()._stream_response(context):
+                    yielded = True
+                    yield chunk
+                return
+            except Exception as exc:
+                err_str = str(exc)
+                is_503 = ("503" in err_str) or ("UNAVAILABLE" in err_str)
+                if yielded or not is_503 or attempt == 2:
+                    raise
+                delay = 1.0 if attempt == 0 else 2.0
+                print(f"[bot.py] Gemini 503 UNAVAILABLE; retrying in {delay}s (attempt {attempt + 1}/2)...")
+                await asyncio.sleep(delay)
+
+
 async def run_bot_pipeline(webrtc_connection: SmallWebRTCConnection):
     """
     Build and run the Pipecat voice pipeline for an active WebRTC session.
     """
     eleven_api_key = os.getenv("ELEVENLABS_API_KEY", "")
-    eleven_voice_id = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")  # Rachel / clear reception voice
+    eleven_voice_id = os.getenv("ELEVENLABS_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")  # Sarah / clear premade reception voice
     google_api_key = os.getenv("GOOGLE_API_KEY", "")
-    gemini_model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
     if not google_api_key or google_api_key.startswith("your_"):
         print("[bot.py] WARNING: GOOGLE_API_KEY is not set or placeholder. Please provide a valid key in .env.")
@@ -277,17 +303,17 @@ async def run_bot_pipeline(webrtc_connection: SmallWebRTCConnection):
         )
     )
 
-    # 2. Silero VAD (Voice Activity Detection)
-    vad = SileroVADAnalyzer()
+    # 2. Silero VAD (Voice Activity Detection) - longer stop_secs prevents intra-sentence turn splits
+    vad = SileroVADAnalyzer(params=VADParams(stop_secs=0.55))
 
     # 3. ElevenLabs Realtime STT
     stt = ElevenLabsRealtimeSTTService(
         api_key=eleven_api_key,
-        model="scribe_v1"
+        model="scribe_v2_realtime"
     )
 
-    # 4. Google LLM Service (Gemini Flash)
-    llm = GoogleLLMService(
+    # 4. Google LLM Service (Gemini Flash-Lite with 503 retry)
+    llm = RetryingGoogleLLMService(
         api_key=google_api_key,
         settings=GoogleLLMService.Settings(
             model=gemini_model,
@@ -305,7 +331,7 @@ async def run_bot_pipeline(webrtc_connection: SmallWebRTCConnection):
     tts = ElevenLabsTTSService(
         api_key=eleven_api_key,
         voice_id=eleven_voice_id,
-        model="eleven_turbo_v2_5"
+        model="eleven_flash_v2_5"
     )
 
     # 6. Tools schema and Context
@@ -318,7 +344,10 @@ async def run_bot_pipeline(webrtc_connection: SmallWebRTCConnection):
     )
 
     context = LLMContext(tools=tools_schema)
-    user_aggregator, assistant_aggregator = LLMContextAggregatorPair(context)
+    user_aggregator, assistant_aggregator = LLMContextAggregatorPair(
+        context,
+        user_params=LLMUserAggregatorParams(vad_analyzer=vad)
+    )
 
     # 7. Transcript Broadcaster
     broadcaster = TranscriptBroadcaster()
@@ -326,10 +355,9 @@ async def run_bot_pipeline(webrtc_connection: SmallWebRTCConnection):
     # 8. Pipeline Assembly
     pipeline = Pipeline([
         transport.input(),        # Incoming mic audio from browser
-        vad,                      # Silero VAD to detect user speech boundaries
         stt,                      # ElevenLabs Realtime STT
         broadcaster,              # Broadcast live transcripts
-        user_aggregator,          # Context aggregator for user turn
+        user_aggregator,          # Context aggregator for user turn (runs Silero VAD)
         llm,                      # Google Gemini with registered function calling tools
         tts,                      # ElevenLabs TTS
         transport.output(),       # Outgoing audio track to browser

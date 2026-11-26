@@ -145,7 +145,7 @@ def init_db(reset: bool = False):
         day_after_str = (date.today() + timedelta(days=2)).isoformat()
 
         sample_appointments = [
-            ("9876543210", "Aarav Sharma", 1, "Dr. Priya Sharma", today_str, "09:00 AM", "confirmed"),
+            ("9810011223", "Aarav Sharma", 1, "Dr. Priya Sharma", today_str, "09:00 AM", "confirmed"),
             ("9811223344", "Sneha Roy", 2, "Dr. Rajesh Kumar", today_str, "10:30 AM", "confirmed"),
             ("9922334455", "Rohan Verma", 3, "Dr. Ananya Patel", tomorrow_str, "02:00 PM", "confirmed"),
             ("9733445566", "Meera Iyer", 5, "Dr. Vikram Rao", day_after_str, "11:30 AM", "confirmed"),

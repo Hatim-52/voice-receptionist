@@ -35,3 +35,10 @@ frontend/dist/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Demo artifacts
+demo.mp4
+demo_transcript.txt
+caller.wav
+record_demo.py
+test_llm_tools.py

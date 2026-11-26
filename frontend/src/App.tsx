@@ -7,6 +7,7 @@ import { PhoneCallModal } from './components/PhoneCallModal';
 import { liveEvents } from './services/sseEvents';
 import type { LiveEventPayload } from './services/sseEvents';
 import { VoiceClient } from './services/voiceClient';
+import { reduceTranscript } from './utils/transcriptReducer';
 
 export function App() {
   const [doctors, setDoctors] = useState<Doctor[]>([]);
@@ -195,15 +196,22 @@ export function App() {
       }
 
       if (event === 'transcript') {
-        const transcriptData = data as unknown as { role: 'user' | 'assistant'; text: string; timestamp?: string };
+        const transcriptData = data as unknown as {
+          role: 'user' | 'assistant';
+          text: string;
+          final?: boolean;
+          timestamp?: string;
+        };
         if (transcriptData.text) {
-          const newItem: TranscriptItem = {
-            id: String(Date.now()) + Math.random(),
-            role: transcriptData.role,
-            text: transcriptData.text,
-            timestamp: transcriptData.timestamp || new Date().toLocaleTimeString()
-          };
-          setTranscripts((prev) => [...prev, newItem]);
+          setTranscripts((prev) =>
+            reduceTranscript(prev, {
+              type: 'transcript',
+              role: transcriptData.role,
+              text: transcriptData.text,
+              isFinal: transcriptData.final ?? true,
+              timestamp: transcriptData.timestamp
+            })
+          );
         }
       }
 
@@ -242,27 +250,28 @@ export function App() {
         onStateChange: (state: CallState) => {
           setCallState(state);
         },
-        onUserTranscript: (text: string) => {
-          setTranscripts((prev) => [
-            ...prev,
-            {
-              id: String(Date.now()) + Math.random(),
+        onUserTranscript: (text: string, isFinal: boolean) => {
+          setTranscripts((prev) =>
+            reduceTranscript(prev, {
+              type: 'transcript',
               role: 'user',
               text,
-              timestamp: new Date().toLocaleTimeString()
-            }
-          ]);
+              isFinal
+            })
+          );
         },
         onBotTranscript: (text: string) => {
-          setTranscripts((prev) => [
-            ...prev,
-            {
-              id: String(Date.now()) + Math.random(),
+          setTranscripts((prev) =>
+            reduceTranscript(prev, {
+              type: 'transcript',
               role: 'assistant',
               text,
-              timestamp: new Date().toLocaleTimeString()
-            }
-          ]);
+              isFinal: false
+            })
+          );
+        },
+        onBotTurnEnd: () => {
+          setTranscripts((prev) => reduceTranscript(prev, { type: 'agent_turn_end' }));
         },
         onWaveformLevels: (levels: number[]) => {
           setWaveformLevels(levels);

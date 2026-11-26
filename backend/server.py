@@ -14,8 +14,12 @@ Endpoints:
 
 import json
 import asyncio
+from pathlib import Path
 from typing import Set, Dict, Any, List
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware

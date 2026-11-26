@@ -9,10 +9,49 @@ import type { CallState } from '../types';
 
 export interface VoiceClientCallbacks {
   onStateChange: (state: CallState) => void;
-  onUserTranscript?: (text: string) => void;
+  onUserTranscript?: (text: string, isFinal: boolean) => void;
   onBotTranscript?: (text: string) => void;
+  onBotTurnEnd?: () => void;
   onWaveformLevels?: (levels: number[]) => void;
   onError?: (error: string) => void;
+}
+
+const FRIENDLY_VOICE_ERROR = 'Something went wrong on the voice server. Please try again.';
+
+function extractErrorDetail(err: unknown): { detail: string; isNonFatal: boolean } {
+  if (typeof err === 'string') {
+    return { detail: err, isNonFatal: false };
+  }
+  if (err && typeof err === 'object') {
+    const rec = err as Record<string, unknown>;
+    const data =
+      rec.data && typeof rec.data === 'object'
+        ? (rec.data as Record<string, unknown>)
+        : undefined;
+
+    const isNonFatal = rec.fatal === false || data?.fatal === false;
+
+    const candidates = [
+      rec.message,
+      data?.message,
+      data?.error,
+      rec.detail,
+      data?.detail,
+      rec.error,
+    ];
+    for (const c of candidates) {
+      if (typeof c === 'string' && c.trim().length > 0) {
+        return { detail: c.trim(), isNonFatal };
+      }
+    }
+
+    try {
+      return { detail: JSON.stringify(err), isNonFatal };
+    } catch {
+      return { detail: String(err), isNonFatal };
+    }
+  }
+  return { detail: String(err), isNonFatal: false };
 }
 
 export class VoiceClient {
@@ -82,9 +121,9 @@ export class VoiceClient {
               this.setupAudioAnalyser(stream);
             }
           },
-          onUserTranscript: (data: { text: string }) => {
+          onUserTranscript: (data: { text: string; final?: boolean }) => {
             if (data?.text) {
-              this.callbacks.onUserTranscript?.(data.text);
+              this.callbacks.onUserTranscript?.(data.text, Boolean(data.final));
             }
           },
           onBotTranscript: (data: { text: string }) => {
@@ -92,9 +131,19 @@ export class VoiceClient {
               this.callbacks.onBotTranscript?.(data.text);
             }
           },
+          onBotLlmStopped: () => {
+            this.callbacks.onBotTurnEnd?.();
+          },
+          onBotStoppedSpeaking: () => {
+            this.callbacks.onBotTurnEnd?.();
+          },
           onError: (err: unknown) => {
-            console.error('[VoiceClient] Pipecat error:', err);
-            this.callbacks.onError?.(String(err));
+            const { detail, isNonFatal } = extractErrorDetail(err);
+            console.error('[VoiceClient] Pipecat error:', detail, err);
+            if (isNonFatal) {
+              return;
+            }
+            this.callbacks.onError?.(FRIENDLY_VOICE_ERROR);
           }
         }
       });
@@ -106,9 +155,9 @@ export class VoiceClient {
       });
 
     } catch (err: unknown) {
-      console.error('[VoiceClient] Failed to start call:', err);
-      const errMsg = (err as Error)?.message || 'Failed to establish voice call connection.';
-      this.callbacks.onError?.(errMsg);
+      const { detail } = extractErrorDetail(err);
+      console.error('[VoiceClient] Failed to start call:', detail, err);
+      this.callbacks.onError?.(FRIENDLY_VOICE_ERROR);
       this.callbacks.onStateChange('error');
       this.cleanup();
     }

@@ -30,6 +30,7 @@ export interface TranscriptItem {
   role: 'user' | 'assistant';
   text: string;
   timestamp: string;
+  isFinal?: boolean;
 }
 
 export type CallState = 'idle' | 'ringing' | 'connected' | 'ended' | 'error';
